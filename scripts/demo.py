@@ -8,37 +8,48 @@ from unidepth.utils.camera import Pinhole
 
 
 def demo(model):
-    rgb = np.array(Image.open("assets/demo/rgb.png"))
+    rgb = np.array(Image.open("assets/demo/PXL_20250430_135003725.jpg"))
     rgb_torch = torch.from_numpy(rgb).permute(2, 0, 1)
     intrinsics_torch = torch.from_numpy(np.load("assets/demo/intrinsics.npy"))
+    print(intrinsics_torch)
+    intrinsics_torch= torch.tensor([[2833,   0.0000, 2040.0000],
+                                      [  0.0000, 2833, 1588.0000],
+                                      [  0.0000,   0.0000,   1.0000]])
     camera = Pinhole(K=intrinsics_torch.unsqueeze(0))
     
     # infer method of V1 uses still the K matrix as input
     if isinstance(model, (UniDepthV2old, UniDepthV1)):
         camera = camera.K.squeeze(0)
 
-    # predict
+    import matplotlib.pyplot as plt  # Import for adding text
+
+# ... (previous code) ...
+
+# predict
     predictions = model.infer(rgb_torch, camera)
 
-    # get GT and pred
+# get predicted depth
     depth_pred = predictions["depth"].squeeze().cpu().numpy()
-    depth_gt = np.array(Image.open("assets/demo/depth.png")).astype(float) / 1000.0
 
-    # compute error, you have zero divison where depth_gt == 0.0
-    depth_arel = np.abs(depth_gt - depth_pred) / depth_gt
-    depth_arel[depth_gt == 0.0] = 0.0
-
-    # colorize
+# colorize predicted depth
     depth_pred_col = colorize(depth_pred, vmin=0.01, vmax=10.0, cmap="magma_r")
-    depth_gt_col = colorize(depth_gt, vmin=0.01, vmax=10.0, cmap="magma_r")
-    depth_error_col = colorize(depth_arel, vmin=0.0, vmax=0.2, cmap="coolwarm")
 
-    # save image with pred and error
-    artifact = image_grid([rgb, depth_gt_col, depth_pred_col, depth_error_col], 2, 2)
-    Image.fromarray(artifact).save("assets/demo/output.png")
+   # Convert the colorized depth image to RGB 
+    depth_pred_col_rgb = Image.fromarray(depth_pred_col.astype('uint8')).convert('RGB') 
 
-    print("Available predictions:", list(predictions.keys()))
-    print(f"ARel: {depth_arel[depth_gt > 0].mean() * 100:.2f}%")
+# Create a figure and axes for the image
+    fig, ax = plt.subplots(figsize=(10, 10))  # Adjust size as needed
+    ax.imshow(depth_pred_col_rgb)
+
+# Add depth values at specific locations (example)
+    for x in range(0, depth_pred.shape[1], 500):  # Every 100 pixels horizontally
+        for y in range(0, depth_pred.shape[0], 500):  # Every 100 pixels vertically
+           depth_value = depth_pred[y, x]
+           ax.text(x, y, f"{depth_value:.2f}", color='white', fontsize=8)
+
+# Save the image with depth values
+    plt.savefig("assets/demo/predicted_depth_with_values.png")
+    plt.close(fig)  # Close the figure to release resources
 
 
 if __name__ == "__main__":
